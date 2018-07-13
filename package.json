@@ -1,0 +1,15 @@
+{
+  "name": "fanfiction-ML-annotation",
+  "version": "1.0.0",
+  "description": "A set of tentatives to train neural networks to automatically provide annotation to fanfiction text",
+  "main": "index.js",
+  "repository": "https://github.com/Zigur/fanfiction-ML-annotation",
+  "author": "zigur <massimorgon@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "stdlib": "^0.6.0"
+  },
+  "dependencies": {
+    "@tensorflow/tfjs": "^0.12.2"
+  }
+}
