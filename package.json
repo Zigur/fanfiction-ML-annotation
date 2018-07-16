@@ -6,10 +6,11 @@
   "repository": "https://github.com/Zigur/fanfiction-ML-annotation",
   "author": "zigur <massimorgon@gmail.com>",
   "license": "MIT",
-  "devDependencies": {
-    "stdlib": "^0.6.0"
-  },
+  "devDependencies": {},
   "dependencies": {
-    "@tensorflow/tfjs": "^0.12.2"
+    "@tensorflow/tfjs": "^0.12.2",
+    "axios": "^0.18.0",
+    "cheerio": "^1.0.0-rc.2",
+    "stdlib": "^0.6.0"
   }
 }
