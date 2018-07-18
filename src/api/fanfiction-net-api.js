@@ -104,7 +104,7 @@ class Story {
             this.id = id;
         }
         this.fetchData = this.fetchData.bind(this);
-
+        this.parseData = this.parseData.bind(this);
     }
 
     async fetchData() {
@@ -114,18 +114,13 @@ class Story {
                 method: 'GET',
                 url: 'https://www.fanfiction.net/s/12'
             });
-            console.log(`Story.fetchData - done. Response is ${res}`);
+            console.log(`Story.fetchData - done. Response is ${JSON.stringify(res)}`);
             if (res.statusCode === _HTTP_SUCCESS) {
-                const source = res.body;
-                console.log(`Source is: ${source}`);
-                const $ = cheerio.load(source);
-                const title = $('#profile_top > b.xcontrast_txt').text();
-                console.log(`Title is ${title}`);
-                return {
-                    title
-                };
+                this._html = res.body
+                console.log(`Story.fetchData - page HTML is ${this._html}`);
+                
             } else {
-                throw new Error(`Received status ${res.status}`);
+                console.log(`Story.fetchData() - Received status: ${res.status}`);
             }
         }
         catch (err) {
@@ -134,6 +129,23 @@ class Story {
     }
 
     parseData() {
+        if (!this._html) {
+            return {};
+        }
+        const $ = cheerio.load(this._html);
+        const title = $('#profile_top > b.xcontrast_txt').text();
+        const preStoryLinks = $('#pre_story_links a');
+        const categories = preStoryLinks.map((i, elem) => {
+            return {
+                value: `${_FANFICTION_BASE_URL}${$(elem).attr('href')}`,
+                label: $(elem).text()
+            };
+        }).get();
+        console.log(`Title is ${title}`);
+        return {
+            title, 
+            categories
+        };
         
     }
 
