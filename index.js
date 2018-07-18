@@ -1,5 +1,5 @@
 const http = require('http');
-const Story = require('./api/fanfiction-net-api').Story;
+const Story = require('./src/api/fanfiction-net-api').Story;
 
 const hostname = '127.0.0.1';
 const port = '3000';

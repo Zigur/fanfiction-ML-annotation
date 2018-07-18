@@ -1,5 +1,9 @@
-const axios = require('axios');
+const util = require('util');
+
+const request = require('request');
 const cheerio = require('cheerio');
+
+const requestAsync = util.promisify(request);
 
 // REGEX MATCHES
 
@@ -50,6 +54,9 @@ const _FANFICTION_BASE_URL = 'https://www.fanfiction.net';
 // const _USERID_BASE_URL_ = 'https://www.fanfiction.net/u';
 
 const _DATE_COMPARISON = new Date(1970, 1, 1);
+
+const _HTTP_SUCCESS = 200;
+
 
 // function parseString()
 
@@ -103,16 +110,13 @@ class Story {
     async fetchData() {
         console.log('Story.fetchData - trying to fetch data');
         try {
-            const res = await axios({
+            const res = await requestAsync({
                 method: 'GET',
-                url: `${_FANFICTION_BASE_URL}/s/${this.id}`,
-                responseType: 'text/html',
-                'accept-encoding': 'gzip, deflate, br',
-                transformResponse: [data => data]
+                url: 'https://www.fanfiction.net/s/12'
             });
             console.log(`Story.fetchData - done. Response is ${res}`);
-            if (res.status === 200) {
-                const source = res.data;
+            if (res.statusCode === _HTTP_SUCCESS) {
+                const source = res.body;
                 console.log(`Source is: ${source}`);
                 const $ = cheerio.load(source);
                 const title = $('#profile_top > b.xcontrast_txt').text();
@@ -127,6 +131,10 @@ class Story {
         catch (err) {
             console.log(err);
         }
+    }
+
+    parseData() {
+        
     }
 
 }
