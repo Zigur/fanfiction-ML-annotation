@@ -2,6 +2,7 @@ const util = require('util');
 
 const request = require('request');
 const cheerio = require('cheerio');
+const stdlib = require('@stdlib/stdlib');
 
 const requestAsync = util.promisify(request);
 
@@ -12,6 +13,7 @@ const _STORYID_REGEX = /var\s+storyid\s*=\s*(\d+);/;
 const _CHAPTER_REGEX = /var\s+chapter\s*=\s*(\d+);/
 const _CHAPTERS_REGEX = /Chapters:\s*(\d+)\s*/;
 const _WORDS_REGEX = /Words:\s*([\d,]+)\s*/;
+const _FAVS_REGEX = /Favs:\s*([\d,]+)\s*/;
 const _TITLE_REGEX = /var\s+title\s*=\s*'(.+)';/;
 const _DATEP_REGEX = /Published:\s*<span.+?='(\d+)'>/;
 const _DATEU_REGEX = /Updated:\s*<span.+?='(\d+)'>/;
@@ -20,7 +22,7 @@ const _DATEU_REGEX = /Updated:\s*<span.+?='(\d+)'>/;
 const _USERID_REGEX = /var\s+userid\s*=\s*(\d+);/;
 const _AUTHOR_REGEX = /href='\/u\/\d+\/(.+?)'/;
 const _USERID_URL_EXTRACT = /.*\/u\/(\d+)/;
-const _USERNAME_REGEX = /<link rel=\"canonical\" href=\"\/\/www.fanfiction.net\/u\/\d+\/(.+)\">/;
+const _USERNAME_REGEX = /<link rel="canonical" href="\/\/www.fanfiction.net\/u\/\d+\/(.+)">/;
 const _USER_STORY_COUNT_REGEX = /My Stories\s*<span class=badge>(\d+)</;
 const _USER_FAVOURITE_COUNT_REGEX = /Favorite Stories\s*<span class=badge>(\d+)</;
 const _USER_FAVOURITE_AUTHOR_COUNT_REGEX = /Favorite Authors\s*<span class=badge>(\d+)</;
@@ -41,12 +43,12 @@ const _NON_JAVASCRIPT_REGEX = /Rated:(.+?)<\/div>/;
 const _HTML_TAG_REGEX = /<.*?>/;
 
 // Needed to properly decide if a token contains a genre or a character name
-const _GENRES = [
+const _GENRES = new Set([
     'General', 'Romance', 'Humor', 'Drama', 'Poetry', 'Adventure', 'Mystery',
     'Horror', 'Parody', 'Angst', 'Supernatural', 'Suspense', 'Sci-Fi',
     'Fantasy', 'Spiritual', 'Tragedy', 'Western', 'Crime', 'Family', 'Hurt',
     'Comfort', 'Friendship'
-];
+]);
 
 // TEMPLATES
 const _FANFICTION_BASE_URL = 'https://www.fanfiction.net';
@@ -56,12 +58,21 @@ const _FANFICTION_BASE_URL = 'https://www.fanfiction.net';
 const _DATE_COMPARISON = new Date(1970, 1, 1);
 
 const _HTTP_SUCCESS = 200;
-
-
 // function parseString()
 
-function parseInteger() {
+function convertParamToInteger(tokens, substr) {
+    const tested = tokens.find(token => token.includes(substr));
+    return tested ? Number.parseInt(tested.replace(substr, '').trim().replace(',', '')) : 0;
+}
 
+function intersect(setA, setB) {
+    const intersection = new Set();
+    for (const elem of setB) {
+        if (setA.has(elem)) {
+            intersection.add(elem);
+        }
+    }
+    return intersection;
 }
 
 /**
@@ -96,15 +107,14 @@ class Story {
     constructor(id = 0) {
         if (!id) {
             throw Error('please provide an id or a url');
-        }
-        else if (typeof id === 'string') {
+        } else if (typeof id === 'string') {
             id = 1;
-        }
-        else {
+        } else {
             this.id = id;
         }
         this.fetchData = this.fetchData.bind(this);
         this.parseData = this.parseData.bind(this);
+        this.content = [];
     }
 
     async fetchData() {
@@ -112,19 +122,40 @@ class Story {
         try {
             const res = await requestAsync({
                 method: 'GET',
-                url: 'https://www.fanfiction.net/s/12'
+                url: `${_FANFICTION_BASE_URL}/s/${this.id}`
             });
             console.log(`Story.fetchData - done. Response is ${JSON.stringify(res)}`);
             if (res.statusCode === _HTTP_SUCCESS) {
-                this._html = res.body
+                this._html = res.body;
                 console.log(`Story.fetchData - page HTML is ${this._html}`);
                 
             } else {
                 console.log(`Story.fetchData() - Received status: ${res.status}`);
             }
-        }
-        catch (err) {
+        } catch (err) {
             console.log(err);
+        }
+    }
+
+    async loadChapters() {
+        for (let i = 1; i <= this.chapters; i++) {
+            const res = await requestAsync({
+                method: 'GET',
+                url: `${_FANFICTION_BASE_URL}/s/${this.id}/${i}`
+            });
+            if (res.statusCode !== _HTTP_SUCCESS) {
+                this.content.push({
+                    number: i,
+                    text: undefined,
+                    error: 'chapter failed to load'
+                });
+            } else {
+                const $ = cheerio.load(res.body);
+                this.content.push({
+                    number: i,
+                    text: $('#storytextp').text()
+                });
+            }
         }
     }
 
@@ -133,21 +164,47 @@ class Story {
             return {};
         }
         const $ = cheerio.load(this._html);
-        const title = $('#profile_top > b.xcontrast_txt').text();
+        // const title = $('#profile_top > b.xcontrast_txt').text();
         const preStoryLinks = $('#pre_story_links a');
-        const categories = preStoryLinks.map((i, elem) => {
+        this.fandoms = preStoryLinks.map((i, elem) => {
             return {
                 value: `${_FANFICTION_BASE_URL}${$(elem).attr('href')}`,
                 label: $(elem).text()
             };
         }).get();
-        console.log(`Title is ${title}`);
-        return {
-            title, 
-            categories
-        };
+
+        const $storyProfile = $('#profile_top');
+        this.title = $storyProfile.find('b').first().text();
+        this.synopsis = $storyProfile.children('div').text();
+        const $author = $storyProfile.children('a').first(); 
+        this.author = { name: $author.text(), url: `${_FANFICTION_BASE_URL}${$author.attr('href')}` };
+
+        const $otherInfo = $storyProfile.children('span').last();
+        this.rating = $otherInfo.children('a[target=rating]').text();
+        const otherInfo = $otherInfo.text();
+        
+        // const chaptersCount = otherInfo.match(_CHAPTERS_REGEX) || otherInfo.match(_CHAPTERS_REGEX)[0];
+        const tokens = otherInfo.split('-').map(token => token.trim());
+        this.language = tokens[1];
+        this.genres = [...intersect(new Set(tokens), _GENRES)];
+        const numericTokensMap = new Map([
+            ['words', 'Words:'],
+            ['chapters', 'Chapters:'],
+            ['reviews', 'Reviews:'],
+            ['favs', 'Favs:'],
+            ['followers', 'Follows:']
+        ]); 
+        
+        // const meta = {};
+        for (const [key, regex] of numericTokensMap.entries()) {
+            this[key] = convertParamToInteger(tokens, regex);
+        }
         
     }
+
+    toJSON() {
+        return JSON.stringify(stdlib.utils.omit(this, ['_html']));
+    } 
 
 }
 

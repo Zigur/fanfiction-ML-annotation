@@ -6,11 +6,18 @@
   "repository": "https://github.com/Zigur/fanfiction-ML-annotation",
   "author": "zigur <massimorgon@gmail.com>",
   "license": "MIT",
-  "devDependencies": {},
+  "devDependencies": {
+    "eslint": "^5.1.0",
+    "eslint-config-standard": "^11.0.0",
+    "eslint-plugin-import": "^2.13.0",
+    "eslint-plugin-node": "^7.0.1",
+    "eslint-plugin-promise": "^3.8.0",
+    "eslint-plugin-standard": "^3.1.0"
+  },
   "dependencies": {
+    "@stdlib/stdlib": "^0.0.43",
     "@tensorflow/tfjs": "^0.12.2",
     "cheerio": "^1.0.0-rc.2",
-    "request": "^2.87.0",
-    "stdlib": "^0.6.0"
+    "request": "^2.87.0"
   }
 }
