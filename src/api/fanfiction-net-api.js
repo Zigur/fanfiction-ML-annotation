@@ -50,6 +50,36 @@ const _GENRES = new Set([
     'Comfort', 'Friendship'
 ]);
 
+const TABLES = {
+    STORY: 'story',
+    CHAPTER: 'chapter'
+}
+
+const STORY_FIELDS = {
+    ID: 'id',
+    // FANFICTION_NET_ID: 'fanfiction_net_id',
+    TITLE: 'title',
+    SYNOPSIS: 'synopsis',
+    RATING: 'rating',
+    LANGUAGE: 'language',
+    GENRES: 'genres',
+    AUTHOR_ID: 'author_id',
+    WORDS: 'words',
+    CHAPTERS: 'chapters',
+    REVIEWS: 'reviews',
+    FAVS: 'favs',
+    FOLLOWERS: 'followers',
+    CREATED_AT: 'created_at',
+    UPDATED_AT: 'updated_at'
+};
+
+const CHAPTER_FIELDS = {
+    ID: 'id',
+    STORY_ID: 'story_id',
+    NUMBER: 'number',
+    TEXT: 'text'
+};
+
 // TEMPLATES
 const _FANFICTION_BASE_URL = 'https://www.fanfiction.net';
 // const _CHAPTER_URL_TEMPLATE = 'https://www.fanfiction.net/s/';
@@ -84,7 +114,7 @@ function intersect(setA, setB) {
                 Attributes:
             id  (int):              The story id.
             timestamp:              The timestamp of moment when data was consistent with site
-            fandoms [str]:           The fandoms to which the story belongs
+            fandoms [str]:          The fandoms to which the story belongs
             chapter_count (int);    The number of chapters.
             word_count (int):       The number of words.
             author_id (int):        The user id of the author.
@@ -124,10 +154,10 @@ class Story {
                 method: 'GET',
                 url: `${_FANFICTION_BASE_URL}/s/${this.id}`
             });
-            console.log(`Story.fetchData - done. Response is ${JSON.stringify(res)}`);
+            // console.log(`Story.fetchData - done. Response is ${JSON.stringify(res)}`);
             if (res.statusCode === _HTTP_SUCCESS) {
                 this._html = res.body;
-                console.log(`Story.fetchData - page HTML is ${this._html}`);
+                // console.log(`Story.fetchData - page HTML is ${this._html}`);
                 
             } else {
                 console.log(`Story.fetchData() - Received status: ${res.status}`);
@@ -168,8 +198,8 @@ class Story {
         const preStoryLinks = $('#pre_story_links a');
         this.fandoms = preStoryLinks.map((i, elem) => {
             return {
-                value: `${_FANFICTION_BASE_URL}${$(elem).attr('href')}`,
-                label: $(elem).text()
+                url: `${_FANFICTION_BASE_URL}${$(elem).attr('href')}`,
+                name: $(elem).text()
             };
         }).get();
 
@@ -204,10 +234,143 @@ class Story {
 
     toJSON() {
         return JSON.stringify(stdlib.utils.omit(this, ['_html']));
-    } 
+    }
+
+    store(dbConn) {
+
+    }
+
+}
+
+class DataAccessObject {
+
+    constructor(connection) {
+        this.knex = require('knex')({
+            client: 'pg',
+            connection,
+            asyncStackTraces: true
+        });
+    }
+
+    createTables() {
+        const { knex } = this;
+
+        return knex.schema.createTable('author', table => {
+            console.log(`DataAccessObject.createTables - author table created: ${table}`);
+            table.increments('id');
+            table.text('name').index().notNullable();
+            table.text('url').index().notNullable();
+            table.timestamp('created_at').defaultTo(knex.fn.now());
+            table.timestamp('updated_at').defaultTo(knex.fn.now());
+        }).createTable('fandom', table => {
+            console.log(`DataAccessObject.createTables - fandom table created: ${table}`);
+            table.increments('id');
+            table.text('name').index().notNullable();
+            table.text('url').index().notNullable();
+            table.timestamp('created_at').defaultTo(knex.fn.now());
+            table.timestamp('updated_at').defaultTo(knex.fn.now());
+        }).createTable(TABLES.STORY, table => {
+            console.log(`DataAccessObject.createTables - story table created: ${table}`);
+            // table.increments(STORY_FIELDS.ID);
+            table.bigInteger(STORY_FIELDS.ID).primary();
+            table.text(STORY_FIELDS.TITLE).index().notNullable();
+            table.text(STORY_FIELDS.SYNOPSIS);
+            table.text(STORY_FIELDS.RATING);
+            table.text(STORY_FIELDS.LANGUAGE);
+            table.specificType(STORY_FIELDS.GENRES, 'text[]');
+            table.integer(STORY_FIELDS.AUTHOR_ID).references('id').inTable('author');
+            table.integer(STORY_FIELDS.WORDS);
+            table.integer(STORY_FIELDS.CHAPTERS);
+            table.integer(STORY_FIELDS.REVIEWS);
+            table.integer(STORY_FIELDS.FAVS);
+            table.integer(STORY_FIELDS.FOLLOWERS);
+            table.timestamp(STORY_FIELDS.CREATED_AT).defaultTo(knex.fn.now());
+            table.timestamp(STORY_FIELDS.UPDATED_AT).defaultTo(knex.fn.now());
+        }).createTable(TABLES.CHAPTER, table => {
+            console.log(`DataAccessObject.createTables - chapter table created: ${table}`);
+            table.increments(CHAPTER_FIELDS.ID);
+            table.integer(CHAPTER_FIELDS.NUMBER).index().notNullable().defaultTo(1);
+            table.integer(CHAPTER_FIELDS.STORY_ID).references('id').inTable('story').notNullable().index();
+            table.text(CHAPTER_FIELDS.TEXT).notNullable();
+            // add further more refined columns??
+            table.timestamp('created_at').defaultTo(knex.fn.now());
+            table.timestamp('updated_at').defaultTo(knex.fn.now());
+        }).createTable('story_fandom', table => {
+            console.log(`DataAccessObject.createTables - story_fandom table created: ${table}`);
+            table.increments('id');
+            table.integer('story_id').references('id').inTable('story').notNullable().index();
+            table.integer('fandom_id').references('id').inTable('fandom').notNullable().index();
+            table.timestamp('created_at').defaultTo(knex.fn.now());
+            table.timestamp('updated_at').defaultTo(knex.fn.now());
+        });
+
+    }
+
+    dropTables() {
+        return this.knex.schema.dropTableIfExists('story_fandom').dropTableIfExists('chapter')
+            .dropTableIfExists('story').dropTableIfExists('fandom').dropTableIfExists('author');
+    }
+
+    async insertStory(story) {
+        if (!typeof story === Story) {
+            throw new Error('Please provide a valid fanfictionML.Story object to be inserted');
+        }           
+        const { knex } = this;
+        try {
+            knex.transaction[util.promisify.custom] = () => {
+                return new Promise((resolve) => {
+                    knex.transaction(resolve);
+                });
+            };
+            const transactionAsync = util.promisify(knex.transaction);
+            const tx = await transactionAsync();
+            try {
+                const insertStatement = await tx.insert({
+                    'name': story.author.name,
+                    'url': story.author.url
+                }).into('author').toString();
+                const authorRes = await tx.raw(`${insertStatement} on conflict do nothing returning id`);
+                const newStory = {
+                    ...Object.assign(stdlib.utils.pick(story, Object.values(STORY_FIELDS)), {
+                        'author_id': authorRes.rows[0].id
+                    })
+                };
+                const storyId = Number.parseInt((await tx.insert(newStory).into(TABLES.STORY).returning(STORY_FIELDS.ID))[0]);
+                const chapterIds = await tx.insert(story.content.map(chapter => Object.assign(chapter, { story_id: storyId })))
+                    .into(TABLES.CHAPTER).returning(CHAPTER_FIELDS.ID);
+                const fandomsRes = await tx.raw(`${tx.insert(story.fandoms).into('fandom')} on conflict do nothing returning id`);
+                const storyToFandom = fandomsRes.rows.map(fandom => {
+                    return {
+                        story_id: storyId,
+                        fandom_id: Number.parseInt(fandom.id)
+                    };
+                });
+                const storyToFandomIds = await tx.insert(storyToFandom).into('story_fandom').returning('id');
+                tx.commit();
+                return {
+                    authorRes,
+                    storyId,
+                    chapterIds,
+                    fandomsRes,
+                    storyToFandomIds
+                };
+            } catch (e) {
+                console.log(`Error caught: ${e}`);
+                tx.rollback();
+            }
+        } catch (err) {
+            console.log(`Error caught: ${err}`);
+        }
+    }
 
 }
 
 module.exports = {
-    Story: Story
+    Story: Story,
+    DataAccessObject: DataAccessObject,
+    CONSTANTS: {
+        TABLES,
+        STORY_FIELDS,
+        CHAPTER_FIELDS
+    }
 };

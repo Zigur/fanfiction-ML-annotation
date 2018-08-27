@@ -11,6 +11,7 @@ const server = http.createServer(async(req, res) => {
         story.parseData();
         await story.loadChapters();
         const payload = story.toJSON();
+        
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/json');
         res.end(payload);
