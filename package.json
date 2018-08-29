@@ -25,6 +25,7 @@
     "@tensorflow/tfjs": "^0.12.2",
     "cheerio": "^1.0.0-rc.2",
     "knex": "^0.15.2",
+    "minimist": "^1.2.0",
     "module-alias": "^2.1.0",
     "pg": "^7.4.3",
     "request": "^2.87.0"

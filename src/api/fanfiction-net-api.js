@@ -6,42 +6,6 @@ const stdlib = require('@stdlib/stdlib');
 
 const requestAsync = util.promisify(request);
 
-// REGEX MATCHES
-
-// STORY REGEX
-const _STORYID_REGEX = /var\s+storyid\s*=\s*(\d+);/;
-const _CHAPTER_REGEX = /var\s+chapter\s*=\s*(\d+);/
-const _CHAPTERS_REGEX = /Chapters:\s*(\d+)\s*/;
-const _WORDS_REGEX = /Words:\s*([\d,]+)\s*/;
-const _FAVS_REGEX = /Favs:\s*([\d,]+)\s*/;
-const _TITLE_REGEX = /var\s+title\s*=\s*'(.+)';/;
-const _DATEP_REGEX = /Published:\s*<span.+?='(\d+)'>/;
-const _DATEU_REGEX = /Updated:\s*<span.+?='(\d+)'>/;
-
-// USER REGEX
-const _USERID_REGEX = /var\s+userid\s*=\s*(\d+);/;
-const _AUTHOR_REGEX = /href='\/u\/\d+\/(.+?)'/;
-const _USERID_URL_EXTRACT = /.*\/u\/(\d+)/;
-const _USERNAME_REGEX = /<link rel="canonical" href="\/\/www.fanfiction.net\/u\/\d+\/(.+)">/;
-const _USER_STORY_COUNT_REGEX = /My Stories\s*<span class=badge>(\d+)</;
-const _USER_FAVOURITE_COUNT_REGEX = /Favorite Stories\s*<span class=badge>(\d+)</;
-const _USER_FAVOURITE_AUTHOR_COUNT_REGEX = /Favorite Authors\s*<span class=badge>(\d+)</;
-
-// Useful for generating a review URL later on
-const _STORYTEXTID_REGEX = /var\s+storytextid\s*=\s*storytextid=(\d+);/;
-
-// REGEX that used to parse reviews page
-const _REVIEW_COMPLETE_INFO_REGEX = /img class=.*?<\/div/;
-const _REVIEW_USER_NAME_REGEX = /> *([^< ][^<]*)</;
-const _REVIEW_CHAPTER_REGEX = /<small style=[^>]*>([^<]*)</;
-const _REVIEW_TIME_REGEX = /<span data[^>]*>([^<]*)</;
-const _REVIEW_TEXT_REGEX = /<div[^>]*>([^<]*)</;
-
-// Used to parse the attributes which aren't directly contained in the
-// JavaScript and hence need to be parsed manually
-const _NON_JAVASCRIPT_REGEX = /Rated:(.+?)<\/div>/;
-const _HTML_TAG_REGEX = /<.*?>/;
-
 // Needed to properly decide if a token contains a genre or a character name
 const _GENRES = new Set([
     'General', 'Romance', 'Humor', 'Drama', 'Poetry', 'Adventure', 'Mystery',
@@ -52,8 +16,18 @@ const _GENRES = new Set([
 
 const TABLES = {
     STORY: 'story',
-    CHAPTER: 'chapter'
-}
+    CHAPTER: 'chapter',
+    AUTHOR: 'author',
+    FANDOM: 'fandom'
+};
+
+const AUTHOR_FIELDS = {
+    ID: 'id',
+    URL: 'url',
+    NAME: 'name',
+    CREATED_AT: 'created_at',
+    UPDATED_AT: 'updated_at'
+};
 
 const STORY_FIELDS = {
     ID: 'id',
@@ -77,7 +51,17 @@ const CHAPTER_FIELDS = {
     ID: 'id',
     STORY_ID: 'story_id',
     NUMBER: 'number',
-    TEXT: 'text'
+    TEXT: 'text',
+    CREATED_AT: 'created_at',
+    UPDATED_AT: 'updated_at'
+};
+
+const FANDOM_FILEDS = {
+    ID: 'id',
+    URL: 'url',
+    NAME: 'name',
+    CREATED_AT: 'created_at',
+    UPDATED_AT: 'updated_at'
 };
 
 // TEMPLATES
@@ -85,7 +69,7 @@ const _FANFICTION_BASE_URL = 'https://www.fanfiction.net';
 // const _CHAPTER_URL_TEMPLATE = 'https://www.fanfiction.net/s/';
 // const _USERID_BASE_URL_ = 'https://www.fanfiction.net/u';
 
-const _DATE_COMPARISON = new Date(1970, 1, 1);
+// const _DATE_COMPARISON = new Date(1970, 1, 1);
 
 const _HTTP_SUCCESS = 200;
 // function parseString()
@@ -168,7 +152,8 @@ class Story {
     }
 
     async loadChapters() {
-        for (let i = 1; i <= this.chapters; i++) {
+        const contentCount = this.chapters || 1;
+        for (let i = 1; i <= contentCount; i++) {
             const res = await requestAsync({
                 method: 'GET',
                 url: `${_FANFICTION_BASE_URL}/s/${this.id}/${i}`
@@ -225,7 +210,6 @@ class Story {
             ['followers', 'Follows:']
         ]); 
         
-        // const meta = {};
         for (const [key, regex] of numericTokensMap.entries()) {
             this[key] = convertParamToInteger(tokens, regex);
         }
@@ -234,10 +218,6 @@ class Story {
 
     toJSON() {
         return JSON.stringify(stdlib.utils.omit(this, ['_html']));
-    }
-
-    store(dbConn) {
-
     }
 
 }
@@ -255,20 +235,20 @@ class DataAccessObject {
     createTables() {
         const { knex } = this;
 
-        return knex.schema.createTable('author', table => {
+        return knex.schema.createTable(TABLES.AUTHOR, table => {
             console.log(`DataAccessObject.createTables - author table created: ${table}`);
-            table.increments('id');
-            table.text('name').index().notNullable();
-            table.text('url').index().notNullable();
-            table.timestamp('created_at').defaultTo(knex.fn.now());
-            table.timestamp('updated_at').defaultTo(knex.fn.now());
-        }).createTable('fandom', table => {
+            table.increments(AUTHOR_FIELDS.ID);
+            table.text(AUTHOR_FIELDS.NAME).index().unique().notNullable();
+            table.text(AUTHOR_FIELDS.URL).index().unique().notNullable();
+            table.timestamp(AUTHOR_FIELDS.CREATED_AT).defaultTo(knex.fn.now());
+            table.timestamp(AUTHOR_FIELDS.UPDATED_AT).defaultTo(knex.fn.now());
+        }).createTable(TABLES.FANDOM, table => {
             console.log(`DataAccessObject.createTables - fandom table created: ${table}`);
-            table.increments('id');
-            table.text('name').index().notNullable();
-            table.text('url').index().notNullable();
-            table.timestamp('created_at').defaultTo(knex.fn.now());
-            table.timestamp('updated_at').defaultTo(knex.fn.now());
+            table.increments(FANDOM_FILEDS.ID);
+            table.text(FANDOM_FILEDS.NAME).index().unique().notNullable();
+            table.text(FANDOM_FILEDS.URL).index().unique().notNullable();
+            table.timestamp(FANDOM_FILEDS.CREATED_AT).defaultTo(knex.fn.now());
+            table.timestamp(FANDOM_FILEDS.UPDATED_AT).defaultTo(knex.fn.now());
         }).createTable(TABLES.STORY, table => {
             console.log(`DataAccessObject.createTables - story table created: ${table}`);
             // table.increments(STORY_FIELDS.ID);
@@ -293,8 +273,8 @@ class DataAccessObject {
             table.integer(CHAPTER_FIELDS.STORY_ID).references('id').inTable('story').notNullable().index();
             table.text(CHAPTER_FIELDS.TEXT).notNullable();
             // add further more refined columns??
-            table.timestamp('created_at').defaultTo(knex.fn.now());
-            table.timestamp('updated_at').defaultTo(knex.fn.now());
+            table.timestamp(CHAPTER_FIELDS.CREATED_AT).defaultTo(knex.fn.now());
+            table.timestamp(CHAPTER_FIELDS.UPDATED_AT).defaultTo(knex.fn.now());
         }).createTable('story_fandom', table => {
             console.log(`DataAccessObject.createTables - story_fandom table created: ${table}`);
             table.increments('id');
@@ -325,11 +305,27 @@ class DataAccessObject {
             const transactionAsync = util.promisify(knex.transaction);
             const tx = await transactionAsync();
             try {
+                /*
                 const insertStatement = await tx.insert({
                     'name': story.author.name,
                     'url': story.author.url
-                }).into('author').toString();
+                }).into(TABLES.AUTHOR).toString();
                 const authorRes = await tx.raw(`${insertStatement} on conflict do nothing returning id`);
+                */ 
+                const authorRes = await tx.raw(`WITH rows_to_insert (${AUTHOR_FIELDS.NAME}, ${AUTHOR_FIELDS.URL}) AS
+                    ( VALUES (:name, :url) ),
+                    ins AS (
+                        INSERT INTO author (${AUTHOR_FIELDS.NAME}, ${AUTHOR_FIELDS.URL})
+                        SELECT ${AUTHOR_FIELDS.NAME}, ${AUTHOR_FIELDS.URL} FROM rows_to_insert
+                        ON CONFLICT DO NOTHING
+                        RETURNING ${AUTHOR_FIELDS.ID}, ${AUTHOR_FIELDS.NAME}, ${AUTHOR_FIELDS.URL}
+                    ) 
+                    SELECT COALESCE (ins.${AUTHOR_FIELDS.ID}, au.${AUTHOR_FIELDS.ID}) AS ${AUTHOR_FIELDS.ID}, rti.${AUTHOR_FIELDS.NAME}, rti.${AUTHOR_FIELDS.URL}
+                    FROM rows_to_insert rti
+                        LEFT JOIN ins ON ins.${AUTHOR_FIELDS.URL} = rti.${AUTHOR_FIELDS.URL}
+                        LEFT JOIN ${TABLES.AUTHOR} au ON ins.${AUTHOR_FIELDS.URL} = au.${AUTHOR_FIELDS.URL}
+                `, story.author);
+
                 const newStory = {
                     ...Object.assign(stdlib.utils.pick(story, Object.values(STORY_FIELDS)), {
                         'author_id': authorRes.rows[0].id
@@ -338,7 +334,22 @@ class DataAccessObject {
                 const storyId = Number.parseInt((await tx.insert(newStory).into(TABLES.STORY).returning(STORY_FIELDS.ID))[0]);
                 const chapterIds = await tx.insert(story.content.map(chapter => Object.assign(chapter, { story_id: storyId })))
                     .into(TABLES.CHAPTER).returning(CHAPTER_FIELDS.ID);
-                const fandomsRes = await tx.raw(`${tx.insert(story.fandoms).into('fandom')} on conflict do nothing returning id`);
+                // const fandomsRes = await tx.raw(`${tx.insert(story.fandoms).into('fandom')} on conflict do nothing returning id`);
+                const fandomQueryStatement = `WITH rows_to_insert (${FANDOM_FILEDS.NAME}, ${FANDOM_FILEDS.URL}) AS
+                    ( VALUES ${story.fandoms.map(() => '(?, ?)').join(', ')} ),
+                    ins AS (
+                        INSERT INTO fandom (${FANDOM_FILEDS.NAME}, ${FANDOM_FILEDS.URL})
+                        SELECT ${FANDOM_FILEDS.NAME}, ${FANDOM_FILEDS.URL} FROM rows_to_insert
+                        ON CONFLICT DO NOTHING
+                        RETURNING ${FANDOM_FILEDS.ID}, ${FANDOM_FILEDS.NAME}, ${FANDOM_FILEDS.URL}
+                    )
+                    SELECT COALESCE(ins.${FANDOM_FILEDS.ID}, f.${FANDOM_FILEDS.ID}) AS ${FANDOM_FILEDS.ID}, rti.${FANDOM_FILEDS.NAME}, rti.${FANDOM_FILEDS.URL}
+                    FROM rows_to_insert rti
+                        LEFT JOIN ins ON ins.${FANDOM_FILEDS.URL} = rti.${FANDOM_FILEDS.URL}
+                        LEFT JOIN ${TABLES.FANDOM} f ON ins.${FANDOM_FILEDS.URL} = f.${FANDOM_FILEDS.URL}
+                `;
+                const fandomQueryParams = story.fandoms.map(fandom => [fandom.name, fandom.url]).reduce((a, b) => a.concat(b), []);
+                const fandomsRes = await tx.raw(fandomQueryStatement, fandomQueryParams);
                 const storyToFandom = fandomsRes.rows.map(fandom => {
                     return {
                         story_id: storyId,
@@ -371,6 +382,7 @@ module.exports = {
     CONSTANTS: {
         TABLES,
         STORY_FIELDS,
-        CHAPTER_FIELDS
+        CHAPTER_FIELDS,
+        AUTHOR_FIELDS
     }
 };

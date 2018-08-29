@@ -85,6 +85,30 @@ describe('DataAccessObject', function() {
             expect(res).to.have.property('storyToFandomIds');            
         });
 
+        it('inserts a story whose author already exists', async function() {
+            const { TABLES, STORY_FIELDS, CHAPTER_FIELDS, AUTHOR_FIELDS } = CONSTANTS;
+            const countsBefore = (await Promise.all([
+                dao.knex(TABLES.STORY).count(STORY_FIELDS.ID),
+                dao.knex(TABLES.CHAPTER).count(CHAPTER_FIELDS.ID),
+                dao.knex(TABLES.AUTHOR).count(AUTHOR_FIELDS.ID)
+            ])).map(countRes => Number.parseInt(countRes[0].count));
+            const story = new Story(2270);
+            await story.fetchData();
+            story.parseData();
+            await story.loadChapters();
+            await dao.insertStory(story);
+            const countsAfter = (await Promise.all([
+                dao.knex(TABLES.STORY).count(STORY_FIELDS.ID),
+                dao.knex(TABLES.CHAPTER).count(CHAPTER_FIELDS.ID),
+                dao.knex(TABLES.AUTHOR).count(AUTHOR_FIELDS.ID)
+            ])).map(countRes => Number.parseInt(countRes[0].count));
+            expect(countsAfter[0] - countsBefore[0]).to.equal(1);
+            expect(countsAfter[1] - countsBefore[1]).to.equal(story.content.length); // FIXME chapters cannot be 0!!
+            expect(countsAfter[2] - countsBefore[2]).to.equal(0);
+            const select = await dao.knex.select(STORY_FIELDS.AUTHOR_ID).from(TABLES.STORY);
+            console.log(select);
+        });
+
     }); 
 
 });
