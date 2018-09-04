@@ -18,7 +18,8 @@ const TABLES = {
     STORY: 'story',
     CHAPTER: 'chapter',
     AUTHOR: 'author',
-    FANDOM: 'fandom'
+    FANDOM: 'fandom',
+    STORY_FANDOM: 'story_fandom'
 };
 
 const AUTHOR_FIELDS = {
@@ -275,7 +276,7 @@ class DataAccessObject {
             // add further more refined columns??
             table.timestamp(CHAPTER_FIELDS.CREATED_AT).defaultTo(knex.fn.now());
             table.timestamp(CHAPTER_FIELDS.UPDATED_AT).defaultTo(knex.fn.now());
-        }).createTable('story_fandom', table => {
+        }).createTable(TABLES.STORY_FANDOM, table => {
             console.log(`DataAccessObject.createTables - story_fandom table created: ${table}`);
             table.increments('id');
             table.integer('story_id').references('id').inTable('story').notNullable().index();
@@ -289,6 +290,13 @@ class DataAccessObject {
     dropTables() {
         return this.knex.schema.dropTableIfExists('story_fandom').dropTableIfExists('chapter')
             .dropTableIfExists('story').dropTableIfExists('fandom').dropTableIfExists('author');
+    }
+
+    async hasTables() {
+        const { knex } = this;
+        return await knex.schema.hasTable(TABLES.STORY) && await knex.schema.hasTable(TABLES.CHAPTER) && 
+            await knex.schema.hasTable(TABLES.AUTHOR) && await knex.schema.hasTable(TABLES.FANDOM) && 
+            knex.schema.hasTable(TABLES.STORY_FANDOM);
     }
 
     async insertStory(story) {
@@ -356,7 +364,7 @@ class DataAccessObject {
                         fandom_id: Number.parseInt(fandom.id)
                     };
                 });
-                const storyToFandomIds = await tx.insert(storyToFandom).into('story_fandom').returning('id');
+                const storyToFandomIds = await tx.insert(storyToFandom).into(TABLES.STORY_FANDOM).returning('id');
                 tx.commit();
                 return {
                     authorRes,
